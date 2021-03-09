@@ -4,12 +4,14 @@ import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
 
 import android.os.AsyncTask;
+import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
 import android.os.Message;
 import android.util.Log;
 import android.view.View;
+import android.widget.RadioButton;
 import android.widget.TextView;
 
 public class MainActivity extends AppCompatActivity {
@@ -19,7 +21,13 @@ public class MainActivity extends AppCompatActivity {
 
     enum ThreadType {Simple, Handler, AsyncTask}
 
+    public ThreadType currentType;
+
     private TextView tvTimerValue;
+
+    public RadioButton simpleThreadRadioButton;
+    public RadioButton handlerRadioButton;
+    public RadioButton asyncTaskThreadRadioButton;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -27,18 +35,53 @@ public class MainActivity extends AppCompatActivity {
         setContentView(R.layout.activity_main);
 
         tvTimerValue = findViewById(R.id.tv_timer_value);
+        tvTimerValue.setText("0");
 
         //todo add UI logic
 
+        simpleThreadRadioButton = findViewById(R.id.rb_simple_thread);
+        simpleThreadRadioButton.setOnClickListener(radioButtonClickListener);
+
+        handlerRadioButton = findViewById(R.id.rb_handler);
+        handlerRadioButton.setOnClickListener(radioButtonClickListener);
+
+        asyncTaskThreadRadioButton = findViewById(R.id.rb_async_task);
+        asyncTaskThreadRadioButton.setOnClickListener(radioButtonClickListener);
+
+
     }
 
+    View.OnClickListener radioButtonClickListener = new View.OnClickListener() {
+        @Override
+        public void onClick(View v) {
+            RadioButton rb = (RadioButton) v;
+            switch (rb.getId()) {
+                case R.id.rb_simple_thread:
+                    currentType =  ThreadType.Simple;
+                    break;
+                case R.id.rb_handler:
+                    currentType =  ThreadType.Handler;
+                    break;
+                case R.id.rb_async_task:
+                    currentType = ThreadType.AsyncTask;
+                    break;
+
+                default:
+                    break;
+            }
+        }
+    };
+
     public void onStartClick(View view) {
+        startTimer(currentType);
     }
 
     public void onPauseClick(View view) {
+        pauseTimer(currentType);
     }
 
     public void onStopClick(View view) {
+        stopTimer(currentType);
     }
 
     private void startTimer(ThreadType type) {
@@ -89,17 +132,19 @@ public class MainActivity extends AppCompatActivity {
         if (simpleThread == null) {
             simpleThread = new Thread(() -> {
                 Thread.currentThread().setName("SimpleThread");
-                Log.i("TAG", Thread.currentThread().getName());
+                Log.i("SimpleThread", Thread.currentThread().getName());
                 int number = getCurrentTimerValue();
+                Log.i("SimpleThread", "NUMBER = " + number);
                 for (int i = number; i < i + 1; i++) {
                     int finalI = i;
                     runOnUiThread(() -> {
                         tvTimerValue.setText(String.valueOf(finalI));
+                        Log.i("SimpleThread", "finalI = " + finalI);
                     });
                 }
             });
         }
-        Log.i("TAG", Thread.currentThread().getName());
+        Log.i("SimpleThread", " " + Thread.currentThread().getName());
         return simpleThread;
     }
 
@@ -109,6 +154,7 @@ public class MainActivity extends AppCompatActivity {
             super.handleMessage(msg);
             Bundle bundle = msg.getData();
             int number = bundle.getInt(VALUE);
+            Log.i("Handler", "number = " + number);
             tvTimerValue.setText(String.valueOf(number));
         }
     };
@@ -119,11 +165,14 @@ public class MainActivity extends AppCompatActivity {
         if (handlerThread == null) {
             new Thread(() -> {
                 int number = getCurrentTimerValue();
+                Log.i("Handler", "current number = " + number);
                 for (int i = number; i < i + 1; i++) {
                     Message msg = handler.obtainMessage(WHAT);
 
+                    Log.i("Handler", "number i++= " + number);
                     Bundle bundle = new Bundle();
                     bundle.putInt(VALUE, i);
+                    Log.i("Handler", "i++= " + i);
                     msg.setData(bundle);
 
                     handler.handleMessage(msg);
@@ -145,15 +194,18 @@ public class MainActivity extends AppCompatActivity {
     private void pauseTimer(Thread thread) {
         try {
             if (!thread.isInterrupted()) {
+                Log.i("SimpleThread", "thread.wait()");
                 thread.wait();
             }
         } catch (InterruptedException e) {
+            Log.i("SimpleThread", "thread.wait() err = " + e.toString());
             e.printStackTrace();
         }
     }
 
     private void stopTimer(Thread thread) {
         if (!thread.isInterrupted()) {
+            Log.i("SimpleThread", "thread.interrupt()");
             thread.interrupt();
         }
         thread = null;
@@ -165,11 +217,18 @@ public class MainActivity extends AppCompatActivity {
         if (timerTask == null) {
             timerTask = new TimerTask();
         }
+        Log.i("AsyncTask", "getTimerTask() = " + " " + timerTask);
         return timerTask;
     }
 
     private void startAsyncTask() {
-        getTimerTask().execute(getCurrentTimerValue());
+
+        if(Build.VERSION.SDK_INT >= 11/*HONEYCOMB*/) {
+            getTimerTask().executeOnExecutor(AsyncTask.THREAD_POOL_EXECUTOR,getCurrentTimerValue());
+        } else {
+            getTimerTask().execute(getCurrentTimerValue());
+        }
+        Log.i("AsyncTask111", "startAsyncTask() = "  + getCurrentTimerValue() +" timerObj = " + getTimerTask());
     }
 
     private void pauseAsyncTask() {
@@ -178,6 +237,7 @@ public class MainActivity extends AppCompatActivity {
 
     private void stopAsyncTask() {
         getTimerTask().cancel(true);
+        Log.i("AsyncTask111", "stopAsyncTask()  timerObj = " + getTimerTask());
         timerTask = null;
     }
 
@@ -185,9 +245,15 @@ public class MainActivity extends AppCompatActivity {
 
         @Override
         protected Void doInBackground(Integer... integers) {
+
             int number = integers[0];
+            Log.i("AsyncTask111", "number = " + number);
             for (int i = number; i < i + 1; i++) {
-                onProgressUpdate(i);
+                //onProgressUpdate(i);
+                // выводим промежуточные результаты
+                publishProgress(i);
+                Log.i("AsyncTask", "current number = " + number);
+
             }
             return null;
         }
@@ -196,12 +262,22 @@ public class MainActivity extends AppCompatActivity {
         protected void onProgressUpdate(Integer... values) {
             super.onProgressUpdate(values);
             int number = values[0];
+            Log.i("AsyncTask", "current number onProgressUpdate = " + number);
             tvTimerValue.setText(String.valueOf(number));
+        }
+
+        @Override
+        protected void onPostExecute(Void unused) {
+            Log.i("AsyncTask", "onPostExecute = " + this);
+            super.onPostExecute(unused);
         }
     }
 
     private int getCurrentTimerValue() {
         String value = tvTimerValue.getText().toString();
+        Log.i("Handler", "getCurrentTimerValue() = " + value);
+        Log.i("SimpleThread", "getCurrentTimerValue() = " + value);
+        Log.i("AsyncTask", "getCurrentTimerValue() = " + value);
         return Integer.parseInt(value);
     }
 }
